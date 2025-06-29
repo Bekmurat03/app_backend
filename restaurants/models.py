@@ -23,6 +23,10 @@ class Restaurant(models.Model):
         related_name="restaurants",
         blank=True
     )
+    # 👇👇👇 ДОБАВЬТЕ ЭТИ ДВА ПОЛЯ 👇👇👇
+    phone_number = models.CharField(max_length=20, blank=True, null=True, verbose_name="Номер телефона")
+    is_active = models.BooleanField(default=False, verbose_name="Активен (принимает заказы)")
+    # 👆👆👆 КОНЕЦ НОВЫХ ПОЛЕЙ 👆👆👆
 
     def __str__(self):
         return self.name

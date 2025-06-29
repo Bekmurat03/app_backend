@@ -40,6 +40,8 @@ class RestaurantWriteSerializer(serializers.ModelSerializer):
             "address",
             "is_approved",
             "categories",
+            "phone_number", # 👈 Добавили
+            "is_active",
         ]
 
     def create(self, validated_data):

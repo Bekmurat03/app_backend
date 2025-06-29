@@ -57,4 +57,9 @@ class OrderSerializer(serializers.ModelSerializer):
 
         order.total_price = total
         order.save()
+        # 👇👇👇 ВОТ НАША ЗАГЛУШКА 👇👇👇
+        # TODO: В будущем здесь будет логика отправки пуш-уведомления
+        # в приложение ресторана о том, что поступил новый заказ.
+        # send_push_notification(restaurant.owner.device_token, f"Новый заказ #{order.code}")
+        # 👆👆👆 КОНЕЦ ЗАГЛУШКИ 👆👆👆
         return order

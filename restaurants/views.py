@@ -7,8 +7,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
-from menu.models import Dish
-from menu.serializers import DishSerializer
+from menu.models import Dish, MenuCategory
+from menu.serializers import DishSerializer, MenuCategorySerializer, MenuCategoryWithDishesSerializer
 from .models import Restaurant
 
 # 👥 Публичный список ресторанов (одобренных)
@@ -43,9 +43,24 @@ class RestaurantCreateView(CreateAPIView):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def restaurant_menu_view(request):
+    """
+    Возвращает меню ресторана, сгруппированное по категориям.
+    """
+    # Находим ресторан текущего пользователя
     restaurant = get_object_or_404(Restaurant, owner=request.user)
-    dishes = Dish.objects.filter(restaurant=restaurant)
-    serializer = DishSerializer(dishes, many=True)
+    
+    # Теперь мы получаем категории ПРАВИЛЬНО - напрямую из объекта ресторана
+    # Django автоматически найдет все категории, связанные с этим рестораном
+    # через поле ManyToManyField, которое вы добавили ранее.
+    categories = restaurant.categories.prefetch_related('dishes').all()
+    
+    # Сериализатор MenuCategorySerializer теперь сможет для каждой категории
+    # подтянуть вложенные блюда, так как они связаны через related_name="dishes"
+    serializer = MenuCategoryWithDishesSerializer(
+        categories, 
+        many=True, 
+        context={'request': request, 'restaurant_id': restaurant.id}
+    )
+    
     return Response(serializer.data)
-
 
