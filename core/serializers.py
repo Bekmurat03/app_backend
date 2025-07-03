@@ -3,7 +3,8 @@ import uuid
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-
+from courier.serializers import CourierProfileSerializer
+from .models import User, Address # 👈 ИМПОРТИРУЙТЕ Address
 User = get_user_model()
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -16,6 +17,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'password': {'write_only': True},
             'phone': {'required': True},
+            'role': {'required': False}
         }
 
     def create(self, validated_data):
@@ -37,6 +39,12 @@ class PhoneTokenObtainPairSerializer(TokenObtainPairSerializer):
         user = User.objects.filter(phone=phone).first()
         if user and user.check_password(password):
             token = self.get_token(user)
+
+            # 👇 2. Добавляем информацию о профиле курьера в ответ 👇
+            courier_profile_data = None
+            if hasattr(user, 'courier_profile'):
+                courier_profile_data = CourierProfileSerializer(user.courier_profile).data
+
             return {
                 'refresh': str(token),
                 'access': str(token.access_token),
@@ -45,6 +53,8 @@ class PhoneTokenObtainPairSerializer(TokenObtainPairSerializer):
                     'name': user.first_name, # Используем first_name
                     'phone': user.phone,
                     'role': user.role,
+                    'notifications_enabled': user.notifications_enabled,
+                    'courier_profile': courier_profile_data # 👈 Новое поле
                 }
             }
         raise serializers.ValidationError("Неверный телефон или пароль")
@@ -63,7 +73,7 @@ class UserDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = (
-            'id', 'first_name', 'phone', 'role', 
+            'id', 'first_name', 'phone', 'role', 'courier_profile',
             'notifications_enabled', 'promotions_enabled'
         )
 
@@ -99,3 +109,9 @@ class ChangePasswordSerializer(serializers.Serializer):
         user.set_password(password)
         user.save()
         return user
+class AddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Address
+        fields = ('id', 'user', 'title', 'full_address', 'latitude', 'longitude', 'is_primary')
+        # Поле user будет только для чтения, оно будет подставляться автоматически
+        read_only_fields = ('user',)

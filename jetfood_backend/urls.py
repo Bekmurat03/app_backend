@@ -22,6 +22,9 @@ urlpatterns = [
     path('api/restaurants/', include('restaurants.urls')),
     path('api/menus/', include('menu.urls')),
     path("api/orders/", include("orders.urls")),
+    path('api/courier/', include('courier.urls')),
+    path('api/', include('reviews.urls')),
+    path('api/notifications/', include('notifications.urls')),
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
 ]
 

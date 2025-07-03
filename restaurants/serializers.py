@@ -1,11 +1,24 @@
+# app_backend/apps/restaurants/serializers.py (ФИНАЛЬНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ)
+
 from rest_framework import serializers
-from .models import Restaurant
+from .models import Restaurant, DeliveryTariff # 👈 1. Импортируем новую модель тарифов
 from menu.serializers import MenuCategorySerializer
 from menu.models import MenuCategory
 
+# 👇 2. Создаем новый сериализатор специально для модели тарифов
+class DeliveryTariffSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DeliveryTariff
+        # Указываем, какие поля из тарифа мы хотим отправлять в приложение
+        fields = ('name', 'start_time', 'end_time', 'base_fee', 'fee_per_km')
 
+
+# Этот сериализатор для чтения (когда приложение получает данные о ресторане)
 class RestaurantSerializer(serializers.ModelSerializer):
     categories = MenuCategorySerializer(many=True, read_only=True)
+    # 👇 3. Добавляем новое поле 'tariffs'
+    # Оно будет содержать список всех тарифов для данного ресторана
+    tariffs = DeliveryTariffSerializer(many=True, read_only=True)
 
     class Meta:
         model = Restaurant
@@ -18,10 +31,13 @@ class RestaurantSerializer(serializers.ModelSerializer):
             "address",
             "is_approved",
             "categories",
+            "latitude", "longitude",
+            "tariffs", # 👈 4. Не забываем добавить поле в список
         ]
 
 
-# 🔐 Используется для создания и редактирования ресторана (например, в админке или приложении ресторана)
+# Этот сериализатор для записи (он остается без изменений,
+# так как тарифы управляются только из админки)
 class RestaurantWriteSerializer(serializers.ModelSerializer):
     categories = serializers.PrimaryKeyRelatedField(
         queryset=MenuCategory.objects.all(),
@@ -40,8 +56,9 @@ class RestaurantWriteSerializer(serializers.ModelSerializer):
             "address",
             "is_approved",
             "categories",
-            "phone_number", # 👈 Добавили
-            "is_active",
+            # "phone_number", # Поле закомментировано, так как его нет в вашей модели
+            # "is_active", # и этого тоже
+            "latitude", "longitude",
         ]
 
     def create(self, validated_data):

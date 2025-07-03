@@ -7,6 +7,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from datetime import timedelta
 
 class OrderListCreateView(generics.ListCreateAPIView):
     """ Для клиента: просмотр своих заказов и создание нового. """
@@ -35,16 +37,33 @@ class RestaurantOrdersView(generics.ListAPIView):
 # 👇👇👇 ДОБАВЬТЕ/ЗАМЕНИТЕ НА ЭТИ КЛАССЫ 👇👇👇
 
 class AcceptOrderView(APIView):
+    """
+    Для ресторана: принять заказ и указать время готовки.
+    """
     permission_classes = [IsAuthenticated]
 
     def post(self, request, order_id):
         restaurant = get_object_or_404(Restaurant, owner=request.user)
         order = get_object_or_404(Order, id=order_id, restaurant=restaurant)
+        
+        # Получаем время готовки от приложения ресторана
+        preparation_time_minutes = request.data.get('preparation_time')
+
+        if not preparation_time_minutes:
+            return Response({'error': 'Необходимо указать время готовки'}, status=status.HTTP_400_BAD_REQUEST)
 
         if order.status == 'pending':
             order.status = 'accepted'
+            order.preparation_time = int(preparation_time_minutes)
+            # 👇👇👇 ДОБАВЬТЕ ЭТУ СТРОКУ 👇👇👇
+            # Рассчитываем и сохраняем, когда заказ будет готов
+            order.estimated_delivery_time = timezone.now() + timedelta(minutes=int(preparation_time_minutes))
             order.save()
-            return Response({'status': 'Заказ принят'}, status=status.HTTP_200_OK)
+            
+            # TODO: Здесь в будущем будет запускаться задача по поиску курьера
+            # find_and_assign_courier_async(order.id)
+            
+            return Response({'status': f'Заказ принят, время готовки: {preparation_time_minutes} мин'}, status=status.HTTP_200_OK)
         return Response({'error': 'Этот заказ нельзя принять.'}, status=status.HTTP_400_BAD_REQUEST)
 
 class RejectOrderView(APIView):
@@ -93,3 +112,26 @@ class OrderDetailView(generics.RetrieveAPIView):
     def get_queryset(self):
         # Клиент может видеть только свои заказы
         return Order.objects.filter(user=self.request.user)
+
+
+class CancelOrderView(APIView):
+    """
+    Для клиента: возможность отменить свой собственный заказ.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, order_id):
+        # Находим заказ, который принадлежит текущему пользователю
+        order = get_object_or_404(Order, id=order_id, user=request.user)
+
+        # Отменить можно только заказ в статусе "В ожидании"
+        if order.status == 'pending':
+            order.status = 'cancelled'
+            order.save()
+            return Response({'status': 'Заказ успешно отменен'}, status=status.HTTP_200_OK)
+
+        # Если статус уже другой (например, "Принят"), отменить нельзя
+        return Response(
+            {'error': 'Этот заказ уже нельзя отменить.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )

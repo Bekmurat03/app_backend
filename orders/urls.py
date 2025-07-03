@@ -6,14 +6,14 @@ from .views import (
     AcceptOrderView,
     RejectOrderView,
     UpdateOrderStatusView,
-    OrderDetailView,
+    OrderDetailView,CancelOrderView
 )
 
 urlpatterns = [
     # 📦 Для клиента
     path("", OrderListCreateView.as_view(), name="order-list-create"),
     path("<int:pk>/", OrderDetailView.as_view(), name="order-detail-client"),
-
+    path("<int:order_id>/cancel/", CancelOrderView.as_view(), name="order-cancel-client"),
     # 👨‍🍳 Для ресторана
     path("restaurant/", RestaurantOrdersView.as_view(), name="restaurant-orders-list"),
     path("restaurant/<int:order_id>/accept/", AcceptOrderView.as_view(), name="order-accept"),

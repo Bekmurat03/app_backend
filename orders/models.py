@@ -38,6 +38,17 @@ class Order(models.Model):
         null=True, 
         blank=True
     )
+     # 👇👇👇 ДОБАВЬТЕ ЭТИ ПОЛЯ 👇👇👇
+    preparation_time = models.PositiveSmallIntegerField(
+        null=True, blank=True, verbose_name="Время готовки (мин)"
+    )
+    estimated_delivery_time = models.DateTimeField(
+        null=True, blank=True, verbose_name="Примерное время доставки"
+    )
+    # 👆👆👆 КОНЕЦ НОВЫХ ПОЛЕЙ 👆👆👆
+    delivery_lat = models.FloatField(null=True, blank=True, verbose_name="Широта доставки")
+    delivery_lon = models.FloatField(null=True, blank=True, verbose_name="Долгота доставки")
+    delivery_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Стоимость доставки")
     def save(self, *args, **kwargs):
         if not self.code:
             self.code = generate_order_code()
@@ -50,6 +61,8 @@ class OrderItem(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
     menu = models.ForeignKey(Dish, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(default=1)
-
+    price_at_time_of_order = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, verbose_name="Цена на момент заказа"
+    )
     def __str__(self):
         return f"{self.quantity} x {self.menu.name}"

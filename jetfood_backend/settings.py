@@ -13,10 +13,13 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from datetime import timedelta
 import os
 from pathlib import Path
-
+from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
+# Например, если бы ключ использовался здесь:
+# ANY_GOOGLE_SETTING = os.getenv("Maps_API_KEY")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -27,7 +30,7 @@ SECRET_KEY = 'django-insecure-3wriuo8t2&a9nd&5sg(mcpekgq(8m2nm2nwzu@i3l6i!uqj9ar
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['192.168.100.13']
+ALLOWED_HOSTS = ['192.168.100.16']
 
 
 # Application definition
@@ -47,6 +50,9 @@ INSTALLED_APPS = [
     'restaurants',
     'menu',
     'orders',
+    'courier',
+    'reviews',
+    'notifications',
 ]
 
 MIDDLEWARE = [
@@ -150,3 +156,6 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+# 👇 3. Используем переменную вместо ключа
+# Например, если бы ключ использовался здесь:
+# ANY_GOOGLE_SETTING = os.getenv("Maps_API_KEY")
