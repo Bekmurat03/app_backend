@@ -22,6 +22,10 @@ def generate_order_code():
             return code
 
 class Order(models.Model):
+    PAYMENT_METHOD_CHOICES = [
+        ('card_online', 'Картой онлайн'),
+        # ('cash', 'Наличными'), # Убираем наличные
+    ]
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="orders")
     restaurant = models.ForeignKey(Restaurant, on_delete=models.CASCADE, related_name="orders", null=True, blank=True)
 
@@ -46,6 +50,17 @@ class Order(models.Model):
         null=True, blank=True, verbose_name="Примерное время доставки"
     )
     # 👆👆👆 КОНЕЦ НОВЫХ ПОЛЕЙ 👆👆👆
+    payment_method = models.CharField(
+        max_length=20, 
+        choices=PAYMENT_METHOD_CHOICES, 
+        default='card_online', 
+        verbose_name="Способ оплаты"
+    )
+    payment_id = models.CharField(
+        max_length=255, blank=True, null=True, verbose_name="ID платежа PayLink"
+    )
+    is_paid = models.BooleanField(default=False, verbose_name="Оплачен")
+    
     delivery_lat = models.FloatField(null=True, blank=True, verbose_name="Широта доставки")
     delivery_lon = models.FloatField(null=True, blank=True, verbose_name="Долгота доставки")
     delivery_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Стоимость доставки")

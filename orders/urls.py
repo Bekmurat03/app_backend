@@ -1,7 +1,9 @@
 # orders/urls.py
 from django.urls import path
 from .views import (
+    CreatePaymentView,
     OrderListCreateView,
+    PayLinkWebhookView,
     RestaurantOrdersView,
     AcceptOrderView,
     RejectOrderView,
@@ -19,4 +21,6 @@ urlpatterns = [
     path("restaurant/<int:order_id>/accept/", AcceptOrderView.as_view(), name="order-accept"),
     path("restaurant/<int:order_id>/reject/", RejectOrderView.as_view(), name="order-reject"),
     path("restaurant/<int:order_id>/update_status/", UpdateOrderStatusView.as_view(), name="order-update-status"),
+    path('<int:order_id>/create-payment/', CreatePaymentView.as_view(), name='create-payment'),
+    path('payment-webhook/', PayLinkWebhookView.as_view(), name='payment-webhook'),
 ]

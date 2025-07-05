@@ -9,6 +9,10 @@ from orders.serializers import OrderSerializer
 from .models import CourierProfile
 from .serializers import CourierProfileSerializer, OrderTrackingSerializer
 from rest_framework import generics
+from rest_framework.exceptions import NotFound
+from .permissions import IsCourier
+from django.db.models import Sum, Count
+from django.utils import timezone
 
 class DocumentUploadView(APIView):
     """
@@ -50,7 +54,7 @@ class CurrentOrderView(generics.RetrieveAPIView):
         if not order:
             # Если активного заказа нет, можно вернуть ошибку 404 или пустой ответ.
             # Для простоты вернем ошибку, которую приложение сможет обработать.
-            raise generics.NotFound("Активный заказ не найден.")
+            raise NotFound("Активный заказ не найден.")
         return order
 class AvailableOrdersView(generics.ListAPIView):
     """
@@ -151,3 +155,66 @@ class OrderTrackingView(APIView):
             return Response(serializer.data)
         except Order.DoesNotExist:
             return Response({'error': 'Заказ не найден'}, status=status.HTTP_404_NOT_FOUND)
+class ToggleOnlineStatusView(APIView):
+    """
+    Для курьера: переключение статуса онлайн/оффлайн.
+    """
+    # 👇 2. Применяем новое, более надежное правило
+    permission_classes = [IsAuthenticated, IsCourier]
+
+    def post(self, request, *args, **kwargs):
+        # 3. Ручная проверка больше не нужна, ее делает IsCourier
+        profile, created = CourierProfile.objects.get_or_create(user=request.user)
+        
+        profile.is_online = not profile.is_online
+        profile.save(update_fields=['is_online'])
+        
+        return Response(
+            {'status': 'success', 'is_online': profile.is_online},
+            status=status.HTTP_200_OK
+        )
+class CourierOrderHistoryView(generics.ListAPIView):
+    """
+    Для курьера: возвращает всю историю его заказов.
+    """
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Находим все заказы, назначенные на текущего курьера
+        return Order.objects.filter(courier=self.request.user).order_by('-created_at')
+class CourierStatsView(APIView):
+    """
+    Возвращает статистику для текущего курьера.
+    """
+    permission_classes = [IsAuthenticated, IsCourier]
+
+    def get(self, request, *args, **kwargs):
+        courier = request.user
+        today = timezone.now().date()
+        
+        today_stats = Order.objects.filter(
+            courier=courier, 
+            status='delivered',
+            created_at__date=today
+        ).aggregate(
+            earnings_today=Sum('delivery_fee'),
+            orders_today=Count('id')
+        )
+
+        total_stats = Order.objects.filter(
+            courier=courier, 
+            status='delivered'
+        ).aggregate(
+            earnings_total=Sum('delivery_fee'),
+            orders_total=Count('id')
+        )
+
+        data = {
+            'earnings_today': today_stats.get('earnings_today') or 0,
+            'orders_today': today_stats.get('orders_today') or 0,
+            'earnings_total': total_stats.get('earnings_total') or 0,
+            'orders_total': total_stats.get('orders_total') or 0,
+        }
+        
+        return Response(data)

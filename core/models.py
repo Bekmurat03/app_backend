@@ -18,7 +18,7 @@ class User(AbstractUser):
     username = models.CharField(max_length=150, unique=True, blank=True, null=True)
 
     # 👇👇👇 НАШИ НОВЫЕ ПОЛЯ 👇👇👇
-    notifications_enabled = models.BooleanField(default=True, verbose_name="Основные уведомления")
+    is_push_enabled = models.BooleanField(default=True, verbose_name="Push-уведомления включены")
     promotions_enabled = models.BooleanField(default=True, verbose_name="Рекламные уведомления")
     # 👆👆👆 КОНЕЦ НОВЫХ ПОЛЕЙ 👆👆👆
     latitude = models.FloatField(null=True, blank=True, verbose_name="Широта курьера")

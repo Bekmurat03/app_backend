@@ -1,23 +1,24 @@
+# app_backend/apps/restaurants/urls.py (ФИНАЛЬНАЯ ВЕРСИЯ)
+
 from django.urls import path
 from .views import (
     ApprovedRestaurantListView,
     RestaurantDetailView,
     MyRestaurantView,
     RestaurantCreateView,
-    restaurant_menu_view,
+    ToggleActiveView,
+    restaurant_menu_view # 👈 Убеждаемся, что новый view импортирован
 )
 
 urlpatterns = [
-    # 📱 Клиенты видят только одобренные рестораны
+    # Публичные URL
     path("", ApprovedRestaurantListView.as_view(), name="restaurant-list"),
     path("<int:pk>/", RestaurantDetailView.as_view(), name="restaurant-detail"),
 
-    # 👨‍🍳 Ресторатор может посмотреть и отредактировать свой ресторан
+    # URL для владельца ресторана
     path("me/", MyRestaurantView.as_view(), name="my-restaurant"),
-
-    # 🔐 Только админ может создавать рестораны через админ-панель
-    path("admin/create/", RestaurantCreateView.as_view(), name="restaurant-create"),
-
-    # 🍽 Меню ресторана (для владельца ресторана)
+    path("me/toggle-active/", ToggleActiveView.as_view(), name="toggle-restaurant-active"),
+    
+    # 👇 ИСПРАВЛЕНО: Этот путь теперь будет работать
     path("menu/", restaurant_menu_view, name="restaurant-menu"),
 ]

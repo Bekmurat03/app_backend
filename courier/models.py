@@ -29,7 +29,8 @@ class CourierProfile(models.Model):
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
-
+    is_online = models.BooleanField(default=False, verbose_name="На линии")
+    
     def __str__(self):
         return f"Профиль курьера: {self.user.get_full_name() or self.user.phone}"
 

@@ -9,7 +9,11 @@ from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from datetime import timedelta
-
+import requests
+import hashlib
+from django.conf import settings
+import base64
+from payments.models import PaymentCard
 class OrderListCreateView(generics.ListCreateAPIView):
     """ Для клиента: просмотр своих заказов и создание нового. """
     serializer_class = OrderSerializer
@@ -59,11 +63,13 @@ class AcceptOrderView(APIView):
             # Рассчитываем и сохраняем, когда заказ будет готов
             order.estimated_delivery_time = timezone.now() + timedelta(minutes=int(preparation_time_minutes))
             order.save()
+            serializer = OrderSerializer(order)
+            return Response(serializer.data, status=status.HTTP_200_OK)
             
             # TODO: Здесь в будущем будет запускаться задача по поиску курьера
             # find_and_assign_courier_async(order.id)
             
-            return Response({'status': f'Заказ принят, время готовки: {preparation_time_minutes} мин'}, status=status.HTTP_200_OK)
+            
         return Response({'error': 'Этот заказ нельзя принять.'}, status=status.HTTP_400_BAD_REQUEST)
 
 class RejectOrderView(APIView):
@@ -76,7 +82,10 @@ class RejectOrderView(APIView):
         if order.status == 'pending':
             order.status = 'cancelled'
             order.save()
-            return Response({'status': 'Заказ отклонен'}, status=status.HTTP_200_OK)
+            serializer = OrderSerializer(order)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+          
         return Response({'error': 'Этот заказ нельзя отклонить.'}, status=status.HTTP_400_BAD_REQUEST)
 
 class UpdateOrderStatusView(APIView):
@@ -135,3 +144,89 @@ class CancelOrderView(APIView):
             {'error': 'Этот заказ уже нельзя отменить.'},
             status=status.HTTP_400_BAD_REQUEST
         )
+class CreatePaymentView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, order_id):
+        card_id = request.data.get('card_id')
+        try:
+            order = get_object_or_404(Order, id=order_id, user=request.user)
+            amount = int(order.total_price * 100)
+
+            payload = {
+                "checkout": {
+                    "transaction_type": "payment",
+                    "order": {
+                        "amount": amount,
+                        "currency": "KZT",
+                        "description": f"Оплата заказа №{order.id}"
+                    },
+                    "settings": {
+                        "success_url": "jetfood://payment/success",
+                        "failure_url": "jetfood://payment/failure"
+                    }
+                }
+            }
+
+            credentials = f"{settings.PAYLINK_API_KEY}:{settings.PAYLINK_API_SECRET}"
+            encoded_credentials = base64.b64encode(credentials.encode()).decode()
+
+            headers = {
+                "Authorization": f"Basic {encoded_credentials}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "X-API-Version": "2"
+            }
+
+            response = requests.post(
+                "https://checkout.paylink.kz/ctp/api/checkouts",
+                json=payload,
+                headers=headers,
+                timeout=10
+            )
+
+            print("📦 Ответ от PayLink:", response.status_code, response.text)
+
+            if response.status_code == 201:
+                checkout_url = response.json()['checkout']['redirect_url']
+                payment_id = response.json().get('id')
+                
+                # Сохраняем ID платежа в заказ
+                order.payment_id = payment_id
+                order.save()
+
+                return Response({"payment_url": checkout_url})
+            else:
+                return Response({"error": response.json()}, status=response.status_code)
+
+        except Order.DoesNotExist:
+            return Response({"error": "Заказ не найден"}, status=404)
+        except Exception as e:
+            print("❌ Ошибка создания платежа:", e)
+            return Response({"error": "Ошибка при создании платежа."}, status=500)
+
+# --- 👇👇👇 НОВЫЙ VIEW ДЛЯ ОБРАБОТКИ ВЕБХУКА ОТ PAYLINK 👇👇👇 ---
+class PayLinkWebhookView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        data = request.data
+        
+        # TODO: Добавить проверку хэша из вебхука для безопасности
+        
+        payment_status = data.get('status')
+        order_id = data.get('order_id')
+
+        try:
+            order = Order.objects.get(id=order_id)
+            if payment_status == 'paid':
+                order.is_paid = True
+                order.status = 'accepted'
+                order.save()
+            else:
+                order.status = 'cancelled'
+                order.save()
+
+            return Response(status=status.HTTP_200_OK)
+        except Order.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)

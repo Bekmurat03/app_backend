@@ -30,7 +30,7 @@ SECRET_KEY = 'django-insecure-3wriuo8t2&a9nd&5sg(mcpekgq(8m2nm2nwzu@i3l6i!uqj9ar
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['192.168.100.16', 'appbackend-production-720d.up.railway.app']
+ALLOWED_HOSTS = ['192.168.100.9']
 
 
 # Application definition
@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'courier',
     'reviews',
     'notifications',
+    'payments',
 ]
 
 MIDDLEWARE = [
@@ -77,6 +78,11 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=5),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
 }
+
+# --- Финальные настройки для PayLink.kz ---
+# Вместо 'shop_id' мы используем название PAYLINK_API_KEY
+PAYLINK_API_KEY = os.getenv("PAYLINK_API_KEY")
+PAYLINK_API_SECRET = os.getenv("PAYLINK_API_SECRET")
 
 AUTH_USER_MODEL = 'core.User'
 

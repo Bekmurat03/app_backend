@@ -32,7 +32,9 @@ class RestaurantSerializer(serializers.ModelSerializer):
             "is_approved",
             "categories",
             "latitude", "longitude",
-            "tariffs", # 👈 4. Не забываем добавить поле в список
+            "tariffs",
+            "is_active",
+            "phone_number" # 👈 4. Не забываем добавить поле в список
         ]
 
 
@@ -56,9 +58,8 @@ class RestaurantWriteSerializer(serializers.ModelSerializer):
             "address",
             "is_approved",
             "categories",
-            # "phone_number", # Поле закомментировано, так как его нет в вашей модели
             # "is_active", # и этого тоже
-            "latitude", "longitude",
+            "latitude", "longitude", "phone_number",
         ]
 
     def create(self, validated_data):

@@ -1,4 +1,4 @@
-# app_backend/apps/orders/serializers.py (ФИНАЛЬНАЯ ВЕРСИЯ БЕЗ ОШИБКИ ФОРМАТА)
+# app_backend/apps/orders/serializers.py (ФИНАЛЬНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ)
 
 from rest_framework import serializers
 from restaurants.serializers import RestaurantSerializer
@@ -8,7 +8,7 @@ from core.models import Address
 from django.utils import timezone
 import math
 from decimal import Decimal
-from django.db.models import F # 👈 1. ИМПОРТИРУЕМ F() EXPRESSION
+from django.db.models import F
 
 # --- Вспомогательная функция для расчета расстояния ---
 def get_distance(lat1, lon1, lat2, lon2):
@@ -33,7 +33,6 @@ class OrderItemDishSerializer(serializers.ModelSerializer):
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
-    # menu_item теперь будет содержать объект со всеми нужными данными
     menu_item = OrderItemDishSerializer(source='menu', read_only=True)
 
     class Meta:
@@ -49,24 +48,27 @@ class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True)
     restaurant = RestaurantSerializer(read_only=True)
     address_id = serializers.IntegerField(write_only=True)
-
+    payment_method = serializers.CharField(required=False, write_only=True)
     class Meta:
         model = Order
+         # 👇 ГЛАВНОЕ ИЗМЕНЕНИЕ: Добавляем недостающие поля
         fields = [
             'id', 'code', 'address', 'comment', 'total_price',
             'delivery_fee', 'status', 'created_at', 'items', 'restaurant',
-            'address_id', 'preparation_time', 'estimated_delivery_time'
+            'address_id', 'delivery_lat', 'delivery_lon', 'payment_method', # 👈 Добавлено
+            'is_paid', 'payment_id',
         ]
         read_only_fields = (
             'status', 'created_at', 'total_price', 'code',
-            'restaurant', 'delivery_fee', 'user', 'address','preparation_time', 'estimated_delivery_time'
+            'restaurant', 'delivery_fee', 'user', 'address',
+            'delivery_lat', 'delivery_lon', 'is_paid', 'payment_id'
         )
 
     def create(self, validated_data):
         items_data = validated_data.pop('items')
         address_id = validated_data.pop('address_id')
         user = self.context['request'].user
-
+        payment_method = validated_data.pop('payment_method', 'card_online')
         if not items_data:
             raise serializers.ValidationError("Нельзя создать пустой заказ.")
 
@@ -76,18 +78,20 @@ class OrderSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Указанный адрес не найден.")
 
         first_dish = items_data[0]['menu']
+        # ИСПРАВЛЕНО: Получаем ресторан напрямую из блюда
         restaurant = first_dish.restaurant
 
+        if not restaurant.is_active:
+            raise serializers.ValidationError("Извините, этот ресторан сейчас не принимает заказы.")
+
+        # --- ИСПРАВЛЕНО: Реальная логика расчета доставки вместо заглушки ---
         delivery_fee = Decimal('0.00')
         if restaurant.tariffs.exists() and restaurant.latitude and address_obj.latitude:
             distance = get_distance(address_obj.latitude, address_obj.longitude, restaurant.latitude, restaurant.longitude)
-            
             now = timezone.now().time()
+            
             active_tariff = None
-            
-            # 👇 2. ИСПРАВЛЕНО: Используем F('end_time') вместо строки 'end_time'
             night_tariff = restaurant.tariffs.filter(start_time__gt=F('end_time')).first()
-            
             if night_tariff and (now >= night_tariff.start_time or now < night_tariff.end_time):
                 active_tariff = night_tariff
             else:
@@ -105,6 +109,7 @@ class OrderSerializer(serializers.ModelSerializer):
         order = Order.objects.create(
             restaurant=restaurant,
             delivery_fee=delivery_fee,
+            payment_method=payment_method,
             **validated_data
         )
 

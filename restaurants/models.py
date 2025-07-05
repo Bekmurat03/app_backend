@@ -17,7 +17,6 @@ class Restaurant(models.Model):
     address = models.CharField(max_length=255)
     is_approved = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
-
     categories = models.ManyToManyField(
         'menu.MenuCategory',  # 👈 ССЫЛКА-СТРОКА
         related_name="restaurants",

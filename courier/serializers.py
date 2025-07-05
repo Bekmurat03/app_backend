@@ -8,7 +8,8 @@ class CourierProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = CourierProfile
         # Указываем поля, которые приложение будет отправлять
-        fields = ['id_card_photo', 'driver_license_photo','verification_status']
+        fields = ['id_card_photo', 'driver_license_photo', 'verification_status', 'is_online']
+        read_only_fields = ('verification_status',)
 # Этот сериализатор будет отдавать ТОЛЬКО публичную информацию о курьере
 class CourierSerializer(serializers.ModelSerializer):
     class Meta:
