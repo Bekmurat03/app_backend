@@ -144,13 +144,16 @@ class CancelOrderView(APIView):
             {'error': 'Этот заказ уже нельзя отменить.'},
             status=status.HTTP_400_BAD_REQUEST
         )
+
+
 class CreatePaymentView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    # 👇 2. Исправляем 'order_id' на 'pk', чтобы соответствовать вашему urls.py
     def post(self, request, order_id):
         card_id = request.data.get('card_id')
         try:
-            order = get_object_or_404(Order, id=order_id, user=request.user)
+            order = get_object_or_404(Order, id=pk, user=request.user)
             amount = int(order.total_price * 100)
 
             payload = {
@@ -167,6 +170,17 @@ class CreatePaymentView(APIView):
                     }
                 }
             }
+
+            # --- 👇👇👇 ВОТ ВАША НОВАЯ ЛОГИКА 👇👇👇 ---
+            # Если клиент выбрал сохраненную карту, добавляем ее в запрос
+            if card_id:
+                try:
+                    card = PaymentCard.objects.get(id=card_id, user=request.user)
+                    # ВАЖНО: PayLink ожидает токен карты, а не наш ID
+                    payload['checkout']['customer_card_id'] = card.card_token
+                except PaymentCard.DoesNotExist:
+                    return Response({'error': 'Выбранная карта не найдена.'}, status=status.HTTP_400_BAD_REQUEST)
+            # --- КОНЕЦ НОВОЙ ЛОГИКИ ---
 
             credentials = f"{settings.PAYLINK_API_KEY}:{settings.PAYLINK_API_SECRET}"
             encoded_credentials = base64.b64encode(credentials.encode()).decode()
@@ -190,8 +204,7 @@ class CreatePaymentView(APIView):
             if response.status_code == 201:
                 checkout_url = response.json()['checkout']['redirect_url']
                 payment_id = response.json().get('id')
-                
-                # Сохраняем ID платежа в заказ
+
                 order.payment_id = payment_id
                 order.save()
 
