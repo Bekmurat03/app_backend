@@ -1,26 +1,16 @@
-# apps/payments/serializers.py
+# payments/serializers.py (ОБНОВЛЕННАЯ ВЕРСИЯ)
 from rest_framework import serializers
 from .models import PaymentCard
 
 class PaymentCardSerializer(serializers.ModelSerializer):
+    """Сериализатор для чтения данных о сохраненной карте."""
     class Meta:
         model = PaymentCard
-        fields = (
-            'id',
-            'name',  # 👈 добавлено название карты
-            'card_type',
-            'last_four',
-            'expiry_month',
-            'expiry_year',
-            'is_primary',
-        )
+        # Добавляем поле name для удобства пользователя
+        fields = ('id', 'name', 'card_type', 'last_four', 'is_primary')
 
 
-class CreatePaymentCardSerializer(serializers.Serializer):
-    """
-    Сериализатор для ПРИЕМА данных от приложения при добавлении новой карты.
-    """
-    name = serializers.CharField(required=False, max_length=50)  # 👈 добавлено название карты
-    card_number = serializers.CharField(write_only=True, min_length=16, max_length=16)
-    expiry_month = serializers.CharField(write_only=True, min_length=2, max_length=2)
-    expiry_year = serializers.CharField(write_only=True, min_length=4, max_length=4)
+class CardCreateSerializer(serializers.Serializer):
+    """Сериализатор для ПРИЕМА токена от фронтенда."""
+    card_token = serializers.CharField(required=True, write_only=True)
+    name = serializers.CharField(required=False, allow_blank=True) # Позволяем пользователю задать имя карте

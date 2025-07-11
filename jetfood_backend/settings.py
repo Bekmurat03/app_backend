@@ -30,7 +30,7 @@ SECRET_KEY = 'django-insecure-3wriuo8t2&a9nd&5sg(mcpekgq(8m2nm2nwzu@i3l6i!uqj9ar
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['192.168.100.9']
+ALLOWED_HOSTS = ['192.168.100.5', 'e199e7892ec6.ngrok-free.app','127.0.0.1','localhost',]
 
 
 # Application definition
@@ -165,3 +165,22 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # 👇 3. Используем переменную вместо ключа
 # Например, если бы ключ использовался здесь:
 # ANY_GOOGLE_SETTING = os.getenv("Maps_API_KEY")
+
+# ==============================================================================
+# НАСТРОЙКИ КОМИССИЙ И МОНЕТИЗАЦИИ
+# ==============================================================================
+
+RESTAURANT_COMMISSION_PERCENT = 20.0
+COURIER_COMMISSION_PERCENT = 5.0
+CLIENT_SERVICE_FEE_PERCENT = 5.0
+MIN_CLIENT_SERVICE_FEE = 100.0
+MAX_CLIENT_SERVICE_FEE = 300.0
+
+# ==============================================================================
+# НАСТРОЙКИ ROBOKASSA
+# ==============================================================================
+# Вставьте ваши реальные данные в .env файл
+ROBOKASSA_MERCHANT_LOGIN = os.getenv('ROBOKASSA_MERCHANT_LOGIN')
+ROBOKASSA_PASSWORD_1 = os.getenv('ROBOKASSA_PASSWORD_1')
+ROBOKASSA_PASSWORD_2 = os.getenv('ROBOKASSA_PASSWORD_2')
+ROBOKASSA_IS_TEST = os.getenv('ROBOKASSA_IS_TEST', '1') == '1'

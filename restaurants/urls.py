@@ -1,4 +1,4 @@
-# app_backend/apps/restaurants/urls.py (ФИНАЛЬНАЯ ВЕРСИЯ)
+# app_backend/apps/restaurants/urls.py (ИСПРАВЛЕННАЯ ВЕРСИЯ)
 
 from django.urls import path
 from .views import (
@@ -7,11 +7,11 @@ from .views import (
     MyRestaurantView,
     RestaurantCreateView,
     ToggleActiveView,
-    restaurant_menu_view # 👈 Убеждаемся, что новый view импортирован
+    RestaurantMenuView # 👈 ИСПРАВЛЕНО: Импортируем правильный класс
 )
 
 urlpatterns = [
-    # Публичные URL
+    # Публичные URL для клиентов
     path("", ApprovedRestaurantListView.as_view(), name="restaurant-list"),
     path("<int:pk>/", RestaurantDetailView.as_view(), name="restaurant-detail"),
 
@@ -19,6 +19,9 @@ urlpatterns = [
     path("me/", MyRestaurantView.as_view(), name="my-restaurant"),
     path("me/toggle-active/", ToggleActiveView.as_view(), name="toggle-restaurant-active"),
     
-    # 👇 ИСПРАВЛЕНО: Этот путь теперь будет работать
-    path("menu/", restaurant_menu_view, name="restaurant-menu"),
+    # ИСПРАВЛЕНО: Используем класс RestaurantMenuView с .as_view()
+    path("me/menu/", RestaurantMenuView.as_view(), name="my-restaurant-menu"),
+
+    # URL для администраторов
+    path("create/", RestaurantCreateView.as_view(), name="restaurant-create"),
 ]

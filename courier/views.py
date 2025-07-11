@@ -1,220 +1,187 @@
-# courier/views.py
-from rest_framework import status
-from rest_framework.views import APIView
+# courier/views.py (ИСПРАВЛЕННАЯ ВЕРСИЯ)
+from payments.services import PayLinkService
+from rest_framework import generics, status, views
+# 👇 ИСПРАВЛЕНО: Добавляем недостающий импорт 'permissions'
+from rest_framework import permissions
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from django.shortcuts import get_object_or_404
-from orders.models import Order
-from orders.serializers import OrderSerializer
-from .models import CourierProfile
-from .serializers import CourierProfileSerializer, OrderTrackingSerializer
-from rest_framework import generics
 from rest_framework.exceptions import NotFound
-from .permissions import IsCourier
+from django.shortcuts import get_object_or_404
 from django.db.models import Sum, Count
 from django.utils import timezone
+from rest_framework.views import APIView
+from django.db import transaction
+import logging
+from orders.models import Order
+from .models import CourierProfile
+from .serializers import CourierProfileSerializer, CourierOrderSerializer, OrderTrackingSerializer
+from .permissions import IsCourier, IsOrderCourier
+from . import services
 
-class DocumentUploadView(APIView):
-    """
-    Для курьера: загрузка документов для верификации.
-    """
-    permission_classes = [IsAuthenticated]
+# --- Управление профилем курьера ---
+logger = logging.getLogger(__name__)
+
+class DocumentUploadView(views.APIView):
+    """Для курьера: загрузка/обновление документов для верификации."""
+    permission_classes = [IsCourier]
 
     def post(self, request, *args, **kwargs):
-        # Проверяем, что это курьер
-        if request.user.role != 'courier':
-            return Response(
-                {"error": "Только курьеры могут загружать документы."},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
-        # Находим или создаем профиль для текущего пользователя
         profile, created = CourierProfile.objects.get_or_create(user=request.user)
-
-        # Передаем данные из запроса в сериализатор
-        serializer = CourierProfileSerializer(instance=profile, data=request.data)
-
+        # partial=True позволяет обновлять только переданные поля
+        serializer = CourierProfileSerializer(instance=profile, data=request.data, partial=True)
         if serializer.is_valid():
-            # Если данные валидны, меняем статус на "На проверке" и сохраняем
             serializer.save(verification_status='on_review')
-            return Response({"success": "Документы успешно загружены и отправлены на проверку."}, status=status.HTTP_200_OK)
-        
+            return Response({"success": "Документы успешно загружены."}, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-class CurrentOrderView(generics.RetrieveAPIView):
-    """
-    Возвращает текущий активный заказ курьера 
-    (тот, который он взял и еще не доставил).
-    """
-    serializer_class = OrderSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_object(self):
-        # Находим активный заказ (статус 'в пути') для текущего курьера
-        order = Order.objects.filter(courier=self.request.user, status='on_the_way').first()
-        if not order:
-            # Если активного заказа нет, можно вернуть ошибку 404 или пустой ответ.
-            # Для простоты вернем ошибку, которую приложение сможет обработать.
-            raise NotFound("Активный заказ не найден.")
-        return order
-class AvailableOrdersView(generics.ListAPIView):
-    """
-    Для курьера: показывает список заказов, которые готовы к выдаче
-    и еще не назначены на другого курьера.
-    """
-    serializer_class = OrderSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        return Order.objects.filter(status='ready_for_pickup', courier__isnull=True).order_by('-created_at')
-
-class CourierAcceptOrderView(APIView):
-    """
-    Для курьера: позволяет "взять" заказ.
-    """
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, order_id):
-        if request.user.role != 'courier':
-            return Response({"error": "Только курьеры могут принимать заказы."}, status=status.HTTP_403_FORBIDDEN)
-            
-        order = get_object_or_404(Order, id=order_id)
-
-        if order.status != 'ready_for_pickup' or order.courier is not None:
-            return Response({"error": "Этот заказ уже недоступен."}, status=status.HTTP_400_BAD_REQUEST)
-        
-        order.courier = request.user
-        order.status = 'on_the_way'
-        order.save()
-        
-        # TODO: Отправить пуш клиенту, что курьер выехал
-        
-        serializer = OrderSerializer(order)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-class OrderPickedUpView(APIView):
-    """ Курьер отмечает, что забрал заказ из ресторана. """
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, order_id):
-        order = get_object_or_404(Order, id=order_id, courier=request.user)
-        # Это действие возможно, только если заказ в пути (on_the_way)
-        # В реальной жизни тут может быть проверка кода у ресторана
-        if order.status == 'on_the_way':
-            # Здесь можно добавить доп. статус, например, 'picked_up',
-            # но для простоты пока оставим 'on_the_way'.
-            # TODO: Отправить PUSH клиенту, что заказ едет.
-            return Response({"success": "Статус заказа обновлен."}, status=status.HTTP_200_OK)
-        return Response({"error": "Неверный статус заказа."}, status=status.HTTP_400_BAD_REQUEST)
 
 
-class OrderDeliveredView(APIView):
-    """ Курьер отмечает, что доставил заказ клиенту. """
-    permission_classes = [IsAuthenticated]
+class ToggleOnlineStatusView(views.APIView):
+    """Для курьера: переключение статуса онлайн/оффлайн."""
+    permission_classes = [IsCourier]
 
-    def post(self, request, order_id):
-        order = get_object_or_404(Order, id=order_id, courier=request.user)
-        if order.status == 'on_the_way':
-            order.status = 'delivered'
-            order.save()
-            # TODO: Отправить PUSH клиенту и ресторану, что заказ завершен.
-            return Response({"success": "Заказ успешно доставлен."}, status=status.HTTP_200_OK)
-        return Response({"error": "Неверный статус заказа."}, status=status.HTTP_400_BAD_REQUEST)
-class UpdateCourierLocationView(APIView):
-    """
-    Для курьера: обновить свое текущее местоположение.
-    """
-    permission_classes = [IsAuthenticated]
+    def post(self, request, *args, **kwargs):
+        profile, created = CourierProfile.objects.get_or_create(user=request.user)
+        profile.is_online = not profile.is_online
+        profile.save(update_fields=['is_online'])
+        return Response({'is_online': profile.is_online}, status=status.HTTP_200_OK)
 
-    def post(self, request):
-        user = request.user
-        if user.role != 'courier':
-            return Response({'error': 'Только курьеры могут обновлять локацию'}, status=status.HTTP_403_FORBIDDEN)
-        
+
+class UpdateCourierLocationView(views.APIView):
+    """Для курьера: обновить свое текущее местоположение."""
+    permission_classes = [IsCourier]
+    
+    def post(self, request, *args, **kwargs):
         latitude = request.data.get('latitude')
         longitude = request.data.get('longitude')
-
         if latitude is not None and longitude is not None:
-            user.latitude = latitude
-            user.longitude = longitude
-            user.save()
+            request.user.latitude = latitude
+            request.user.longitude = longitude
+            request.user.save(update_fields=['latitude', 'longitude'])
             return Response({'status': 'Местоположение обновлено'}, status=status.HTTP_200_OK)
-        
         return Response({'error': 'Не предоставлены координаты'}, status=status.HTTP_400_BAD_REQUEST)
 
 
-class OrderTrackingView(APIView):
-    """
-    Для клиента: получить данные для отслеживания заказа.
-    """
-    permission_classes = [IsAuthenticated]
+# --- Работа с заказами ---
 
-    def get(self, request, order_id):
-        try:
-            # Клиент может отслеживать только свой заказ
-            order = Order.objects.get(id=order_id, user=request.user)
-            serializer = OrderTrackingSerializer(order)
-            return Response(serializer.data)
-        except Order.DoesNotExist:
-            return Response({'error': 'Заказ не найден'}, status=status.HTTP_404_NOT_FOUND)
-class ToggleOnlineStatusView(APIView):
-    """
-    Для курьера: переключение статуса онлайн/оффлайн.
-    """
-    # 👇 2. Применяем новое, более надежное правило
-    permission_classes = [IsAuthenticated, IsCourier]
-
-    def post(self, request, *args, **kwargs):
-        # 3. Ручная проверка больше не нужна, ее делает IsCourier
-        profile, created = CourierProfile.objects.get_or_create(user=request.user)
-        
-        profile.is_online = not profile.is_online
-        profile.save(update_fields=['is_online'])
-        
-        return Response(
-            {'status': 'success', 'is_online': profile.is_online},
-            status=status.HTTP_200_OK
-        )
-class CourierOrderHistoryView(generics.ListAPIView):
-    """
-    Для курьера: возвращает всю историю его заказов.
-    """
-    serializer_class = OrderSerializer
-    permission_classes = [IsAuthenticated]
+class AvailableOrdersView(generics.ListAPIView):
+    """Для курьера: список заказов, готовых к выдаче."""
+    serializer_class = CourierOrderSerializer
+    permission_classes = [IsCourier]
 
     def get_queryset(self):
-        # Находим все заказы, назначенные на текущего курьера
-        return Order.objects.filter(courier=self.request.user).order_by('-created_at')
-class CourierStatsView(APIView):
+        return Order.objects.filter(status='ready_for_pickup', courier__isnull=True).select_related(
+            'restaurant'
+        ).prefetch_related(
+            'items__menu'
+        ).order_by('-created_at')
+
+
+class CourierAcceptOrderView(views.APIView):
+    """Для курьера: "взять" заказ."""
+    permission_classes = [IsCourier]
+
+    def post(self, request, order_id):
+        try:
+            order = services.accept_order_for_courier(order_id, request.user)
+            serializer = CourierOrderSerializer(order)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Order.DoesNotExist:
+            return Response({"error": "Заказ не найден."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CurrentOrderView(generics.RetrieveAPIView):
+    """Возвращает текущий активный заказ курьера."""
+    serializer_class = CourierOrderSerializer
+    permission_classes = [IsCourier]
+
+    def get_object(self):
+        order = Order.objects.select_related('restaurant').prefetch_related('items__menu').filter(
+            courier=self.request.user, status='on_the_way'
+        ).first()
+        if not order:
+            raise NotFound("Активный заказ не найден.")
+        return order
+
+
+class UpdateDeliveryStatusView(APIView):
     """
-    Возвращает статистику для текущего курьера.
+    Для курьера: отметить, что забрал заказ или доставил.
+    При доставке инициирует списание и сплитование.
     """
-    permission_classes = [IsAuthenticated, IsCourier]
+    permission_classes = [permissions.IsAuthenticated, IsCourier, IsOrderCourier]
+
+    def post(self, request, order_id):
+        order = get_object_or_404(Order, id=order_id)
+        self.check_object_permissions(request, order)
+
+        action = request.data.get('action')
+
+        if action == 'picked_up' and order.status == 'ready_for_pickup':
+            order.status = 'on_the_way'
+            order.save(update_fields=['status'])
+            return Response({"success": "Статус обновлен: 'В пути'."}, status=status.HTTP_200_OK)
+
+        elif action == 'delivered' and order.status == 'on_the_way':
+            try:
+                with transaction.atomic():
+                    order.status = 'delivered'
+                    order.save(update_fields=['status'])
+                    
+                    if order.authorization_id:
+                        payment_service = PayLinkService()
+                        payment_service.capture_and_split_payment(order)
+
+                return Response({"success": "Заказ успешно доставлен. Оплата списана."}, status=status.HTTP_200_OK)
+            except Exception as e:
+                logger.error(f"Критическая ошибка при завершении заказа {order.id}: {str(e)}")
+                return Response({"error": "Не удалось завершить заказ и списать оплату."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        return Response({"error": f"Неверное действие '{action}' для заказа со статусом '{order.get_status_display()}'."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CourierOrderHistoryView(generics.ListAPIView):
+    """Для курьера: возвращает всю историю его заказов."""
+    serializer_class = CourierOrderSerializer
+    permission_classes = [IsCourier]
+
+    def get_queryset(self):
+        return Order.objects.filter(courier=self.request.user).select_related(
+            'restaurant'
+        ).prefetch_related('items__menu').order_by('-created_at')
+
+
+class CourierStatsView(views.APIView):
+    """Возвращает статистику для текущего курьера."""
+    permission_classes = [IsCourier]
 
     def get(self, request, *args, **kwargs):
+        # ... (логика без изменений) ...
         courier = request.user
         today = timezone.now().date()
-        
-        today_stats = Order.objects.filter(
-            courier=courier, 
-            status='delivered',
-            created_at__date=today
-        ).aggregate(
-            earnings_today=Sum('delivery_fee'),
-            orders_today=Count('id')
+        today_stats = Order.objects.filter(courier=courier, status='delivered', created_at__date=today).aggregate(
+            earnings_today=Sum('delivery_fee'), orders_today=Count('id')
         )
-
-        total_stats = Order.objects.filter(
-            courier=courier, 
-            status='delivered'
-        ).aggregate(
-            earnings_total=Sum('delivery_fee'),
-            orders_total=Count('id')
+        total_stats = Order.objects.filter(courier=courier, status='delivered').aggregate(
+            earnings_total=Sum('delivery_fee'), orders_total=Count('id')
         )
-
-        data = {
+        return Response({
             'earnings_today': today_stats.get('earnings_today') or 0,
             'orders_today': today_stats.get('orders_today') or 0,
             'earnings_total': total_stats.get('earnings_total') or 0,
             'orders_total': total_stats.get('orders_total') or 0,
-        }
-        
-        return Response(data)
+        })
+
+
+# --- VIEW ДЛЯ КЛИЕНТА ---
+
+class OrderTrackingView(generics.RetrieveAPIView):
+    """Для клиента: получить данные для отслеживания заказа."""
+    # Вот здесь была ошибка, теперь `permissions` определен
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = OrderTrackingSerializer
+    queryset = Order.objects.select_related('courier', 'restaurant').all()
+
+    def get_object(self):
+        order = get_object_or_404(self.get_queryset(), id=self.kwargs['order_id'], user=self.request.user)
+        return order

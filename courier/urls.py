@@ -1,19 +1,39 @@
-# courier/urls.py
-from django.urls import path
-from .views import AvailableOrdersView, CourierAcceptOrderView, CourierOrderHistoryView, CourierStatsView, CurrentOrderView, DocumentUploadView, OrderDeliveredView, OrderPickedUpView, OrderTrackingView, ToggleOnlineStatusView, UpdateCourierLocationView
+from django.urls import path, include
+from .views import (
+    DocumentUploadView,
+    ToggleOnlineStatusView,
+    UpdateCourierLocationView,
+    AvailableOrdersView,
+    CourierAcceptOrderView,
+    CurrentOrderView,
+    UpdateDeliveryStatusView, # 👈 Импортируем наш перенесенный view
+    CourierOrderHistoryView,
+    CourierStatsView,
+    OrderTrackingView,
+)
+
+profile_urls = [
+    path('documents/', DocumentUploadView.as_view(), name='document-upload'),
+    path('status/toggle-online/', ToggleOnlineStatusView.as_view(), name='toggle-online'),
+    path('location/update/', UpdateCourierLocationView.as_view(), name='update-location'),
+    path('stats/', CourierStatsView.as_view(), name='stats'),
+]
+
+orders_urls = [
+    path('available/', AvailableOrdersView.as_view(), name='available-orders'),
+    path('current/', CurrentOrderView.as_view(), name='current-order'),
+    path('history/', CourierOrderHistoryView.as_view(), name='order-history'),
+    path('<int:order_id>/accept/', CourierAcceptOrderView.as_view(), name='accept-order'),
+    # 👇 ВОТ НАШ НОВЫЙ URL, КОТОРЫЙ БУДЕТ ИСПОЛЬЗОВАТЬ ПРИЛОЖЕНИЕ КУРЬЕРА
+    path('<int:order_id>/update-status/', UpdateDeliveryStatusView.as_view(), name='update-delivery-status'),
+]
+
+client_urls = [
+    path('track/<int:order_id>/', OrderTrackingView.as_view(), name='order-tracking'),
+]
 
 urlpatterns = [
-    # Этот URL будет использоваться для отправки документов
-    path('upload-documents/', DocumentUploadView.as_view(), name='courier-document-upload'),
-    path("orders/current/", CurrentOrderView.as_view(), name="courier-current-order"),
-     # 👇👇👇 ВОТ НЕДОСТАЮЩИЕ ПУТИ 👇👇👇
-    path("available/", AvailableOrdersView.as_view(), name="courier-available-orders"),
-    path("accept/<int:order_id>/", CourierAcceptOrderView.as_view(), name="courier-accept-order"),
-    path("order/<int:order_id>/picked_up/", OrderPickedUpView.as_view(), name="courier-order-picked-up"),
-    path("order/<int:order_id>/delivered/", OrderDeliveredView.as_view(), name="courier-order-delivered"),
-     path('update-location/', UpdateCourierLocationView.as_view(), name='update-courier-location'),
-    path('orders/<int:order_id>/track/', OrderTrackingView.as_view(), name='order-tracking'),
-    path('toggle-online/', ToggleOnlineStatusView.as_view(), name='courier-toggle-online'),
-    path('history/', CourierOrderHistoryView.as_view(), name='courier-history'),
-    path('stats/', CourierStatsView.as_view(), name='courier-stats'),
+    path('profile/', include(profile_urls)),
+    path('orders/', include(orders_urls)),
+    path('', include(client_urls)),
 ]

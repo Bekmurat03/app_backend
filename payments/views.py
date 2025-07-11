@@ -1,98 +1,64 @@
-from rest_framework import viewsets, permissions, status
-from rest_framework.views import APIView
+from rest_framework import viewsets, permissions, status, mixins
+from rest_framework.decorators import action
 from rest_framework.response import Response
-import requests
-import base64
-from django.conf import settings
-from .models import PaymentCard
-from .serializers import PaymentCardSerializer
+from rest_framework.views import APIView
+from django.shortcuts import get_object_or_404
+import traceback
 
+from .models import PaymentCard, TokenizationAttempt
+from .serializers import PaymentCardSerializer
+from .permissions import IsCardOwner
+from .services import PayLinkService
 
 class CreateCardTokenizationView(APIView):
-    """
-    Возвращает redirect_url для привязки карты (Hosted Payment Page)
-    """
+    """Создает данные для привязки карты (URL и ID операции)."""
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        user = request.user
-        credentials = f"{settings.PAYLINK_API_KEY}:{settings.PAYLINK_API_SECRET}"
-        encoded_credentials = base64.b64encode(credentials.encode()).decode()
-
-        headers = {
-            "Authorization": f"Basic {encoded_credentials}",
-            "Content-Type": "application/json",
-            "X-API-Version": "2"
-        }
-
-        payload = {
-            "checkout": {
-                "transaction_type": "tokenization",
-                "order": {
-                    "amount": 0,
-                    "currency": "KZT",
-                    "description": "Привязка карты в JetFood"
-                },
-                "customer": {
-                    "user_id": str(user.id),
-                    "email": user.email or f"user{user.id}@jetfood.kz",
-                    "phone": user.phone
-                },
-                "settings": {
-                    "success_url": "jetfood://card/success",
-                    "failure_url": "jetfood://card/failure"
-                }
-            }
-        }
-
+        service = PayLinkService()
         try:
-            response = requests.post("https://checkout.paylink.kz/ctp/api/checkouts", json=payload, headers=headers)
-            response_data = response.json()
-            if response.status_code == 201:
-                return Response({"tokenization_url": response_data['checkout']['redirect_url']})
-            else:
-                return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
+            tokenization_data = service.create_card_tokenization_data(request.user)
+            return Response(tokenization_data, status=status.HTTP_200_OK)
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            error_traceback = traceback.format_exc()
+            print("--- ПОЙМАНА ОШИБКА В CreateCardTokenizationView ---")
+            print(error_traceback)
+            print("--- КОНЕЦ ОШИБКИ ---")
+            return Response(
+                {"error": f"Произошла внутренняя ошибка сервера: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class CheckTokenizationStatusView(APIView):
+    """Проверяет статус операции токенизации и сохраняет карту."""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request, attempt_id):
+        try:
+            attempt = TokenizationAttempt.objects.get(id=attempt_id, user=request.user)
+            return Response({"status": attempt.status})
+        except TokenizationAttempt.DoesNotExist:
+            return Response({"error": "Попытка не найдена"}, status=status.HTTP_404_NOT_FOUND)
 
 
-class PaymentCardViewSet(viewsets.ModelViewSet):
+class PaymentCardViewSet(
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet
+):
     """
-    Сохраняем карту по токену без проверки на стороне PayLink.
-    Это упрощённый вариант для тестового окружения.
+    API для управления платежными картами пользователя.
+    Разрешены действия: просмотр списка, просмотр одной, УДАЛЕНИЕ.
     """
     serializer_class = PaymentCardSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, IsCardOwner]
 
     def get_queryset(self):
         return PaymentCard.objects.filter(user=self.request.user)
-
-    def create(self, request, *args, **kwargs):
-        token = request.data.get('token')
-        name = request.data.get('name', 'Моя карта')  # ✅ Название карты по умолчанию
-
-        if not token:
-            return Response({"error": "token обязателен"}, status=status.HTTP_400_BAD_REQUEST)
-
-        if PaymentCard.objects.filter(card_token=token).exists():
-            return Response({"detail": "Карта уже сохранена"}, status=status.HTTP_200_OK)
-
-        try:
-            PaymentCard.objects.create(
-                user=request.user,
-                name=name,  # ✅ добавляем название
-                card_token=token,
-                last_four=token[-4:],
-                expiry_month="12",
-                expiry_year="2030",
-                card_type="PayLink Card"
-            )
-
-            return Response({"success": "Карта успешно сохранена"}, status=status.HTTP_201_CREATED)
-
-        except Exception as e:
-            print("❌ Ошибка при сохранении карты:", str(e))
-            return Response(
-                {"error": "Не удалось сохранить карту", "detail": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        
+    @action(detail=True, methods=['post'])
+    def set_primary(self, request, pk=None):
+        card = self.get_object()
+        card.set_as_primary()
+        return Response({'status': 'Карта установлена как основная'})
