@@ -1,64 +1,97 @@
-from rest_framework import viewsets, permissions, status, mixins
-from rest_framework.decorators import action
-from rest_framework.response import Response
+from rest_framework import generics, status
 from rest_framework.views import APIView
-from django.shortcuts import get_object_or_404
-import traceback
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.db import transaction
+import uuid
 
-from .models import PaymentCard, TokenizationAttempt
-from .serializers import PaymentCardSerializer
-from .permissions import IsCardOwner
-from .services import PayLinkService
+# Наши модели и сервисы
+from .models import SavedUserCard
+from orders.models import Order, OrderItem
+from core.models import Address
+from promos.models import PromoCode
+from .services import PayLinkService 
 
-class CreateCardTokenizationView(APIView):
-    """Создает данные для привязки карты (URL и ID операции)."""
-    permission_classes = [permissions.IsAuthenticated]
+# Наши сериализаторы
+from .serializers import SavedUserCardSerializer
+# 👇 ИСПРАВЛЯЕМ ИМПОРТ: используем правильное имя класса
+from orders.serializers import CreateOrderSerializer 
 
-    def post(self, request):
-        service = PayLinkService()
+
+class CreateOrderAndPaymentView(APIView):
+    """
+    Главная view для оформления заказа.
+    Она создает заказ в БД и возвращает ссылку на оплату.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, *args, **kwargs):
+        # 👇 ИСПРАВЛЯЕМ ИМЯ КЛАССА ЗДЕСЬ
+        serializer = CreateOrderSerializer(data=request.data, context={'request': request})
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # Ваш CreateOrderSerializer уже делает всю работу по созданию заказа
+        # и расчету суммы, поэтому мы просто вызываем его метод save().
+        order = serializer.save()
+
+        # --- Создание платежа через PayLink ---
         try:
-            tokenization_data = service.create_card_tokenization_data(request.user)
-            return Response(tokenization_data, status=status.HTTP_200_OK)
-        except Exception as e:
-            error_traceback = traceback.format_exc()
-            print("--- ПОЙМАНА ОШИБКА В CreateCardTokenizationView ---")
-            print(error_traceback)
-            print("--- КОНЕЦ ОШИБКИ ---")
-            return Response(
-                {"error": f"Произошла внутренняя ошибка сервера: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            paylink_service = PayLinkService()
+            payment_url = paylink_service.create_payment(
+                amount=float(order.total_price),
+                order_id=str(order.id),
+                description=f"Оплата заказа №{order.id}",
+                # enable_apple_pay и enable_google_pay теперь внутри сервиса
             )
-
-class CheckTokenizationStatusView(APIView):
-    """Проверяет статус операции токенизации и сохраняет карту."""
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get(self, request, attempt_id):
-        try:
-            attempt = TokenizationAttempt.objects.get(id=attempt_id, user=request.user)
-            return Response({"status": attempt.status})
-        except TokenizationAttempt.DoesNotExist:
-            return Response({"error": "Попытка не найдена"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"payment_url": payment_url}, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            # Если оплата не удалась, откатываем создание заказа
+            transaction.set_rollback(True)
+            return Response({"error": f"Ошибка создания платежа: {e}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class PaymentCardViewSet(
-    mixins.RetrieveModelMixin,
-    mixins.ListModelMixin,
-    mixins.DestroyModelMixin,
-    viewsets.GenericViewSet
-):
+class SavedCardListView(generics.ListAPIView):
     """
-    API для управления платежными картами пользователя.
-    Разрешены действия: просмотр списка, просмотр одной, УДАЛЕНИЕ.
+    Возвращает список сохраненных карт пользователя.
     """
-    serializer_class = PaymentCardSerializer
-    permission_classes = [permissions.IsAuthenticated, IsCardOwner]
+    serializer_class = SavedUserCardSerializer
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return PaymentCard.objects.filter(user=self.request.user)
-        
-    @action(detail=True, methods=['post'])
-    def set_primary(self, request, pk=None):
-        card = self.get_object()
-        card.set_as_primary()
-        return Response({'status': 'Карта установлена как основная'})
+        return SavedUserCard.objects.filter(user=self.request.user)
+
+
+class PayLinkWebhookView(APIView):
+    """
+    Принимает уведомления от PayLink об успешной оплате или сохранении карты.
+    """
+    def post(self, request, *args, **kwargs):
+        # ВАЖНО: здесь должна быть логика проверки подписи запроса от PayLink
+        event_type = request.data.get("type")
+        data = request.data.get("data")
+
+        if event_type == "payment.success":
+            order_id = data.get("order_id")
+            # Находим заказ в нашей БД и помечаем его как оплаченный
+            try:
+                order = Order.objects.get(id=order_id)
+                order.status = 'PAID' # или ваш статус 'Оплачен'
+                order.save()
+            except Order.DoesNotExist:
+                pass # Игнорируем или логируем ошибку
+
+        elif event_type == "card.tokenized":
+            user_id = data.get("user_id")
+            card_token = data.get("token")
+            card_mask = data.get("mask")
+            # Сохраняем новую карту для пользователя
+            if user_id and card_token and card_mask:
+                SavedUserCard.objects.create(
+                    user_id=user_id,
+                    card_token=card_token,
+                    card_mask=card_mask
+                )
+
+        return Response(status=status.HTTP_200_OK)

@@ -6,10 +6,12 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     RegisterView,
     PhoneLoginView,
+    SendOTPView,
     UserDetailView,
     ChangePasswordView,
     AddressViewSet,
-    TogglePushNotificationView # 👈 Используем единый, правильный View
+    TogglePushNotificationView,
+    VerifyOTPView # 👈 Используем единый, правильный View
 )
 
 # Создаем router только для адресов
@@ -28,7 +30,8 @@ urlpatterns = [
     
     # 👇 ИСПРАВЛЕНО: Путь 'toggle-push/' теперь использует правильный обработчик
     path('toggle-push/', TogglePushNotificationView.as_view(), name='toggle-push'),
-
+    path('auth/send-otp/', SendOTPView.as_view(), name='send-otp'),
+    path('auth/verify-otp/', VerifyOTPView.as_view(), name='verify-otp'),
     # URL для адресов (создает /api/addresses/, /api/addresses/<id>/ и т.д.)
     path('', include(router.urls)),
 ]

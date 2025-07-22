@@ -28,3 +28,7 @@ class MenuCategoryWithDishesSerializer(serializers.ModelSerializer):
     class Meta:
         model = MenuCategory
         fields = ['id', 'name', 'image', 'dishes']
+class MenuItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Dish
+        fields = '__all__' # Включаем все поля из модели Dish

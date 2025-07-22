@@ -67,8 +67,11 @@ class ChangePasswordSerializer(serializers.Serializer):
         user = self.context['request'].user
         user.set_password(password); user.save(); return user
 
+# core/serializers.py
 class AddressSerializer(serializers.ModelSerializer):
     class Meta:
         model = Address
-        fields = ('id', 'user', 'title', 'full_address', 'latitude', 'longitude', 'is_primary')
-        read_only_fields = ('user',)
+        # Указываем все поля, включая те, что нужны для создания
+        fields = ['id', 'user', 'city', 'street', 'house_number', 'latitude', 'longitude', 'is_primary']
+        # Поле user будет только для чтения, оно подставится автоматически
+        read_only_fields = ['user']

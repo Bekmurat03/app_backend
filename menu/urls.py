@@ -2,6 +2,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
+    DishDetailView,
     GlobalCategoryListView,
     MenuByRestaurantView,
     RestaurantsByCategoryView,
@@ -20,6 +21,7 @@ public_urls = [
     path("categories/", GlobalCategoryListView.as_view(), name="global-category-list"),
     path("categories/<int:category_id>/restaurants/", RestaurantsByCategoryView.as_view(), name="restaurants-by-category"),
     path("restaurants/<int:restaurant_id>/", MenuByRestaurantView.as_view(), name="restaurant-menu"),
+    path("dishes/<int:dish_id>/", DishDetailView.as_view(), name="public-dish-detail"),
 ]
 
 # Эндпоинты для управления меню (для приложения ресторана)

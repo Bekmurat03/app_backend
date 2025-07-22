@@ -1,10 +1,12 @@
+# restaurants/admin.py
+
 from django.contrib import admin
 from .models import Restaurant, DeliveryTariff
 
 @admin.register(Restaurant)
 class RestaurantAdmin(admin.ModelAdmin):
-    # 👇 ИСПРАВЛЕНО: Меняем paylink_account_id на robokassa_shop_code
-    list_display = ("id", "name", "owner", "robokassa_shop_code", "is_approved", "created_at")
+    # 👇 ИСПРАВЛЕНИЕ: Заменяем 'robokassa_shop_code' на 'robokassa_login'
+    list_display = ("id", "name", "owner", "robokassa_login", "is_approved", "created_at")
     list_filter = ("is_approved", "created_at")
     search_fields = ("name", "address", "owner__phone")
     readonly_fields = ("created_at", "average_rating", "review_count")
@@ -17,8 +19,8 @@ class RestaurantAdmin(admin.ModelAdmin):
             "fields": ("is_approved", "is_active")
         }),
         ("Финансы", {
-            # 👇 ИСПРАВЛЕНО: Меняем paylink_account_id на robokassa_shop_code
-            "fields": ("robokassa_shop_code", "average_rating", "review_count")
+            # 👇 ИСПРАВЛЕНИЕ: Заменяем 'robokassa_shop_code' на 'robokassa_login'
+            "fields": ("robokassa_login", "average_rating", "review_count")
         }),
         ("Изображения", {
             "fields": ("logo", "banner")

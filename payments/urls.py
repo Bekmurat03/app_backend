@@ -1,14 +1,9 @@
-# payments/urls.py (ПОЛНЫЙ ОБНОВЛЕННЫЙ КОД)
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from .views import CreateCardTokenizationView, CheckTokenizationStatusView, PaymentCardViewSet
-
-router = DefaultRouter()
-router.register(r'cards', PaymentCardViewSet, basename='paymentcard')
+# payments/urls.py
+from django.urls import path
+from .views import CreateOrderAndPaymentView, SavedCardListView, PayLinkWebhookView
 
 urlpatterns = [
-    path('create-tokenization-url/', CreateCardTokenizationView.as_view(), name='create_tokenization_url'),
-    # 👇 НОВЫЙ URL ДЛЯ ПРОВЕРКИ
-    path('check-tokenization-status/<uuid:attempt_id>/', CheckTokenizationStatusView.as_view(), name='check_tokenization_status'),
-    path('', include(router.urls)),
+    path('create-order/', CreateOrderAndPaymentView.as_view(), name='create-order-payment'),
+    path('cards/', SavedCardListView.as_view(), name='saved-cards-list'),
+    path('webhook/', PayLinkWebhookView.as_view(), name='paylink-webhook'),
 ]

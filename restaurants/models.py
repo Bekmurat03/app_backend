@@ -17,11 +17,11 @@ class Restaurant(models.Model):
     categories = models.ManyToManyField('menu.MenuCategory', related_name='restaurants')
 
     # 👇 НОВОЕ ПОЛЕ: ID дополнительного магазина этого ресторана в Robokassa
-    robokassa_shop_code = models.CharField(
+    robokassa_login = models.CharField(
         max_length=255,
         blank=True,
         null=True,
-        verbose_name="Robokassa Shop Code"
+        verbose_name="Логин ресторана в Robokassa"
     )
 
     average_rating = models.DecimalField(max_digits=3, decimal_places=2, default=0.00, verbose_name="Средний рейтинг")

@@ -5,7 +5,7 @@ from django.db.models import Prefetch, Count
 from django.shortcuts import get_object_or_404
 
 from .models import Dish, MenuCategory
-from .serializers import MenuCategorySerializer, DishSerializer, MenuCategoryWithDishesSerializer
+from .serializers import MenuCategorySerializer, DishSerializer, MenuCategoryWithDishesSerializer, MenuItemSerializer
 from restaurants.models import Restaurant
 from restaurants.serializers import RestaurantSerializer
 from .permissions import IsDishOwner # 👈 1. Импортируем наше новое правило
@@ -92,3 +92,11 @@ class DishViewSet(viewsets.ModelViewSet):
             serializer.save(restaurant=restaurant)
         else:
             raise serializers.ValidationError("У вас нет ресторана для добавления блюда.")
+class DishDetailView(generics.RetrieveAPIView):
+    """
+    Публичное View для получения детальной информации о конкретном блюде.
+    """
+    queryset = Dish.objects.filter(is_available=True) # Показываем только доступные блюда
+    serializer_class = MenuItemSerializer
+    lookup_field = 'id'
+    lookup_url_kwarg = 'dish_id'
